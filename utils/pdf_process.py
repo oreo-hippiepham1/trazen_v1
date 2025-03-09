@@ -1,70 +1,88 @@
 from pypdf import PdfReader
 
-def extract_toc(file_path) -> tuple[list[dict], bool, int]:
-    reader = PdfReader(file_path)
+class ChapterExtractor():
+    def __init__(self, filepath):
+        self.reader = PdfReader(filepath)
+        self.chapters = self.extract_toc()
+        self.nested = False
+        self.n_pages = self.reader.get_num_pages()
 
-    chapters_outer = []
-    chapters_inner = []
-    chapters = []
-    nested = False
+    def get_chapters(self):
+        return self.chapters
 
-    if not reader.outline:
-        return None # Cannot find Table of Contents
+    def get_nested(self):
+        return self.nested
 
-    num_pages = reader.get_num_pages()
+    def get_n_pages(self):
+        return self.n_pages
 
-    for item in reader.outline:
-        if isinstance(item, list): # for nested chapters
-            for subitem in item:
-                # print(subitem)
-                chapters.append(
-                    {
-                        'title': subitem.title,
-                        'nest': 'inner',
-                        'page': reader.get_destination_page_number(subitem)
-                    }
-                )
-                # print(f'Appending {subitem.title}')
-                # print('======')
-                nested = True
+    def _recursive_nested_chapter(self, node: list, nest_level: int=0):
+        chapters = []
+
+        if isinstance(node, list):
+            self.nested = True
+            # Handle nested list of chapters
+            for sub_node in node:
+                chapters.extend(self._recursive_nested_chapter(sub_node, nest_level+1))
+            return chapters
+
+        else: # BASE BASE
+            # Single chapter node
+            title = node.title
+            page = self.reader.get_destination_page_number(node) + 1  # 1-based indexing
+            chapter_data = {
+                'title': title,
+                'page': page,
+                'nest': nest_level
+            }
+
+            return [chapter_data]  # Return as list for consistent typing
+
+
+    def extract_toc(self) -> tuple[list[dict]]:
+        """
+        Given a file_path to a Book PDF, extract the book's table of content (if possible by bare minimum).
+        """
+        chapters = []
+
+        if not self.reader.outline:
+            chapters = [] # Cannot find Table of Contents
+
         else:
-            chapters.append(
-                {
-                    'title': item.title,
-                    'nest': 'outer',
-                    'page': reader.get_destination_page_number(item)
-                }
+            chapters.extend(self._recursive_nested_chapter(self.reader.outline, nest_level=0))
+
+        return chapters
+
+
+    def get_page_range_from_dict(self) -> list[dict]:
+        """
+        Given a list of dicts containing:
+        [
+            {
+                'title': ...,
+                'page' : ...
+            },
+            {}, ...
+        ]
+
+        Return a page range for each title
+        """
+        pagerange = []
+        page_dict = self.get_chapters()
+        for d in range(len(page_dict)):
+            current_page = {}
+
+            current_page['title'] = page_dict[d]['title']
+            current_page['nest'] = page_dict[d]['nest']
+            current_page['start'] = page_dict[d]['page']
+
+            try: # page range = current page -> next chapter page
+                current_page['end'] = page_dict[d+1]['page']
+            except Exception as e: # last title
+                current_page['end'] = self.get_n_pages()
+
+            pagerange.append(
+                current_page
             )
 
-    return (chapters, nested, num_pages)
-
-
-def get_page_range_from_dict(page_dict: list[dict], num_page:int) -> list[dict]:
-    """
-    Given a list of dicts containing:
-    [
-        {
-            'title': ...,
-            'page' : ...
-        },
-        {}, ...
-    ]
-
-    Return a page range for each title
-    """
-    pagerange = []
-    count = 0
-    for d in range(len(page_dict)):
-        current_page = {}
-        current_page['title'] = page_dict[d]['title']
-        current_page['start'] = page_dict[d]['page']
-        try: # page range = current page -> next chapter page
-            current_page['end'] = page_dict[d+1]['page'] - 1
-        except Exception as e: # last title
-            current_page['end'] = num_page - 1
-
-        pagerange.append(
-            current_page
-        )
-
-    return pagerange
+        return pagerange

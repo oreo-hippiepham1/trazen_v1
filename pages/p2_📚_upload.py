@@ -4,7 +4,7 @@ import tempfile
 
 from langchain_community.document_loaders import PyPDFLoader
 
-from utils import extract_toc, get_page_range_from_dict
+from utils import ChapterExtractor
 
 st.set_page_config(
     page_title="Test - Upload",
@@ -17,7 +17,6 @@ st.header("Test for uploads")
 class Uploader():
     def __init__(self):
         self.filepath = None
-
 
     def upload_section(self) -> tuple[str, list]:
         uploaded_pdf = st.sidebar.file_uploader(
@@ -50,6 +49,7 @@ class Uploader():
 
         return (temp_pdf_path, pages)
 
+
     def _display_toc(self, toc: list[dict], nested: bool=False):
         if not nested:
             for content in toc:
@@ -59,19 +59,20 @@ class Uploader():
 
         else:
             for content in toc:
-                if content['nest'] == 'outer':
-                    st.markdown(f"________________________\n\n"
-                                f"**{content['title']}**\n\n"
-                                f"Page: {content['page']}\n\n"
-                                f"________________________\n\n")
-                else:
-                    st.markdown(f"  == {content['title']}\n\n"
-                            f"  == Page: {content['page']}\n\n")
+                st.markdown(f"\n\n"
+                            f"{'==='*content['nest']}**{content['title']}** -- Page {content['page']}\n\n"
+                            f"\n\n")
+
 
 
     def display_toc(self):
-        toc, nested, n_pages = extract_toc(self.filepath)
-        if not (toc):
+        extractor = ChapterExtractor(self.filepath)
+        extractor.extract_toc()
+
+        toc = extractor.get_chapters()
+        nested = extractor.get_nested()
+
+        if len(toc) == 0:
             st.warning("Could not successfull parse and extract book chapters!")
             return
         else:
@@ -82,9 +83,12 @@ class Uploader():
             # st.subheader("Small Chaps")
             # st.write(toc_inner)
             # st.subheader("Page Range Test")
-            # prange = get_page_range_from_dict(toc_inner, n_pages)
-            # st.write(prange)
-            self._display_toc(toc, nested)
+            #
+            col1, col2 = st.columns(2)
+            with col1:
+                self._display_toc(toc, nested)
+            prange = extractor.get_page_range_from_dict()
+            col2.write(prange)
 
     def main(self):
         self.upload_section()
