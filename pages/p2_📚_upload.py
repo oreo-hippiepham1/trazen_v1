@@ -60,9 +60,8 @@ class Uploader():
         else:
             for content in toc:
                 st.markdown(f"\n\n"
-                            f"{'==='*content['nest']}**{content['title']}** -- Page {content['page']}\n\n"
+                            f"{'--'*(content['nest']**2)}**{content['title']}** -- Page {content['page']}\n\n"
                             f"\n\n")
-
 
 
     def display_toc(self):
@@ -70,25 +69,23 @@ class Uploader():
         extractor.extract_toc()
 
         toc = extractor.get_chapters()
-        nested = extractor.get_nested()
+        nested = (extractor.get_nest() > 0)
 
         if len(toc) == 0:
             st.warning("Could not successfull parse and extract book chapters!")
             return
         else:
-            # if nested:
-
-            # st.subheader("Big Chaps")
-            # st.write(toc_outer)
-            # st.subheader("Small Chaps")
-            # st.write(toc_inner)
-            # st.subheader("Page Range Test")
-            #
-            col1, col2 = st.columns(2)
-            with col1:
-                self._display_toc(toc, nested)
+            self._display_toc(toc, nested)
             prange = extractor.get_page_range_from_dict()
-            col2.write(prange)
+
+            nest_choice = st.selectbox(
+                label="Nest level for chapter",
+                options=range(1, extractor.get_nest()+1)
+            )
+            st.write(
+                [pr for pr in prange if pr['nest'] == nest_choice]
+            )
+
 
     def main(self):
         self.upload_section()
