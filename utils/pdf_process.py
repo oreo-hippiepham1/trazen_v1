@@ -1,8 +1,16 @@
 from pypdf import PdfReader
+import os
 
 class ChapterExtractor():
     def __init__(self, filepath):
-        self.reader = PdfReader(filepath)
+        try:
+            self.reader = PdfReader(filepath)
+        except Exception as e:
+            raise ValueError(f"Failed to read PDF file: {str(e)}")
+
+        if len(self.reader.pages) == 0:
+            raise ValueError("PDF file is empty")
+
         self.max_nest = 0
         self.chapters = self.extract_toc()
         self.n_pages = self.reader.get_num_pages()
@@ -16,7 +24,23 @@ class ChapterExtractor():
     def get_nest(self):
         return self.max_nest
 
-    def _recursive_nested_chapter_flat(self, node: list, nest_level: int=0):
+    def _recursive_nested_chapter_flat(self, node, nest_level: int=0) -> list:
+        """
+        Recursively extracts chapter information from PDF outline.
+
+        Args:
+            node: A pypdf outline node or list of nodes
+            nest_level: Current nesting level (default: 0)
+
+        Returns:
+            list: List of chapter dictionaries with title, page number, and nesting level
+
+        Raises:
+            ValueError: If node structure is invalid
+        """
+        if node is None:
+            return []
+
         chapters = []
 
         if isinstance(node, list):
@@ -33,7 +57,11 @@ class ChapterExtractor():
         else: # BASE BASE
             # Single chapter node
             title = node.title
-            page = self.reader.get_destination_page_number(node) + 1  # 1-based indexing
+            try:
+                page = self.reader.get_destination_page_number(node) + 1  # 1-based indexing
+            except:
+                page = 1  # Fallback to first page if page number extraction fails
+
             chapter_data = {
                 'title': title,
                 'page': page,
@@ -56,7 +84,7 @@ class ChapterExtractor():
         return chapter_dict
 
 
-    def extract_toc(self) -> tuple[list[dict]]:
+    def extract_toc(self) -> list:
         """
         Given a file_path to a Book PDF, extract the book's table of content (if possible by bare minimum).
         """
@@ -73,37 +101,37 @@ class ChapterExtractor():
 
     def get_page_range_from_dict(self) -> list[dict]:
         """
-        Given a list of dicts containing:
-        [
-            {
-                'title': ...,
-                'page' : ...
-            },
-            {}, ...
-        ]
+        Calculates page ranges for each chapter in the table of contents.
 
-        Return a page range for each title
+        Returns:
+            list[dict]: List of dictionaries containing:
+                - title: Chapter title
+                - nest: Nesting level
+                - start: Starting page number
+                - end: Ending page number (exclusive)
         """
+        if not self.chapters:
+            return []
+
         pagerange = []
-        page_dict = self.get_chapters()
-        for d in range(len(page_dict)):
-            current_page = {}
+        chapters = self.chapters
+        total_pages = self.get_n_pages()
 
-            current_page['title'] = page_dict[d]['title']
-            current_page['nest'] = page_dict[d]['nest']
-            current_page['start'] = page_dict[d]['page']
+        for i, current_chapter in enumerate(chapters):
+            range_info = {
+                'title': current_chapter['title'],
+                'nest': current_chapter['nest'],
+                'start': current_chapter['page']
+            }
 
-            try: # page range = current page -> next chapter page
-                for d_2 in range(d+1, len(page_dict)):
-                    if page_dict[d_2]['nest'] <= page_dict[d]['nest']: # end of current outer chapter / or next is same nest
-                        current_page['end'] = page_dict[d_2]['page']
-                        break
+            # Find the end page by looking at the next chapter at same or lower nesting level
+            end_page = total_pages  # Default to last page
+            for next_chapter in chapters[i + 1:]:
+                if next_chapter['nest'] <= current_chapter['nest']:
+                    end_page = next_chapter['page']
+                    break
 
-            except Exception as e: # last title
-                current_page['end'] = self.get_n_pages()
-
-            pagerange.append(
-                current_page
-            )
+            range_info['end'] = end_page
+            pagerange.append(range_info)
 
         return pagerange

@@ -1,3 +1,2 @@
 from .pdf_process import ChapterExtractor
-
-__all__ = ['ChapterExtractor']
+from .sample_questions import *
