@@ -1,6 +1,51 @@
 from pypdf import PdfReader
 import os
 
+import tempfile
+import streamlit as st
+
+from langchain_community.document_loaders import PyPDFLoader
+
+@st.cache_data
+def process_book(uploaded_pdf) -> tuple[str, list]:
+    """Process the uploaded PDF file and extract text
+    Args:
+        uploaded_pdf: Uploaded PDF file
+    Returns:
+        tuple[str, list]: Tuple containing temporary file path and extracted pages
+    """
+    pages = []
+    temp_pdf_path = ""
+    # Create new temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:
+        temp_pdf.write(uploaded_pdf.getvalue())
+        temp_pdf_path = temp_pdf.name
+
+        # Load and process PDF
+        loader = PyPDFLoader(temp_pdf_path)
+        pages.extend(loader.load())
+
+    return (temp_pdf_path, pages)
+
+@st.cache_data
+def extract_chapter(filepath) -> dict:
+    extractor = ChapterExtractor(filepath)
+    toc = extractor.get_chapters()
+
+    if not toc:
+        st.warning("Could not successfully parse and extract book chapters!")
+        return {}
+
+    # Get page ranges
+    prange = extractor.get_page_range_from_dict()
+    max_nest = extractor.get_nest()
+
+    return {
+        'toc': toc,
+        'prange': prange,
+        'max_nest': max_nest
+    }
+
 class ChapterExtractor():
     def __init__(self, filepath):
         try:
@@ -58,7 +103,7 @@ class ChapterExtractor():
             # Single chapter node
             title = node.title
             try:
-                page = self.reader.get_destination_page_number(node) + 1  # 1-based indexing
+                page = self.reader.get_destination_page_number(node)  # 1-based indexing
             except:
                 page = 1  # Fallback to first page if page number extraction fails
 
@@ -109,6 +154,7 @@ class ChapterExtractor():
                 - nest: Nesting level
                 - start: Starting page number
                 - end: Ending page number (exclusive)
+                - id: Unique identifier for the chapter
         """
         if not self.chapters:
             return []
@@ -132,6 +178,7 @@ class ChapterExtractor():
                     break
 
             range_info['end'] = end_page
+            range_info['id'] = f"ch_{current_chapter['nest']}_{current_chapter['page']}_{end_page}"
             pagerange.append(range_info)
 
         return pagerange

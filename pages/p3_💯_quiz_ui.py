@@ -81,7 +81,8 @@ tab1, tab2 = st.tabs(["Quiz", "Configs"])
 class QuizUITest():
     def __init__(self, quiz_configs):
         # Update n_quiz from configs
-        st.session_state['n_quiz'] = quiz_configs['n_quiz']
+        # st.session_state['n_quiz'] = quiz_configs['n_quiz']
+        pass
 
     def load_quiz(self):
         ss = st.session_state
@@ -201,7 +202,7 @@ class QuizConfigs():
         if ss['conf_save']:  # Only mark as unsaved if it was previously saved
             ss['conf_save'] = False
 
-    def config_save(self):
+    def _config_save(self):
         """Save current widget values to current_config"""
         ss = st.session_state
 
@@ -282,7 +283,7 @@ class QuizConfigs():
         save_btn = st.button(
             label='Save Configuration',
             key='save_btn',
-            on_click=self.config_save,
+            on_click=self._config_save,
             type="primary"  # Make it more prominent
         )
 
