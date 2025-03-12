@@ -8,7 +8,6 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_pinecone import PineconeVectorStore
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from torch import batch_norm
 
 from utils import ChapterExtractor, config_pinecone, config_embedding_model_simple
 from utils import process_book, extract_chapter
