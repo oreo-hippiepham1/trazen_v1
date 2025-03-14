@@ -1,5 +1,3 @@
-from ninja import expand
-from requests import session
 import streamlit as st
 
 from utils import *
