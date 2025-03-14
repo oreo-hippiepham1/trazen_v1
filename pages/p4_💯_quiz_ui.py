@@ -30,7 +30,7 @@ class StateManager:
 
         # Default configuration values
         DEFAULT_CONFIG = {
-            'n_quiz': 5,  # matches slider default
+            'n_quiz': 10,  # matches slider default
             'difficulty': 1,  # matches difficulty slider default
             'topic': "Animals",  # matches selectbox default
             'n_distractors': 3,  # matches distractor slider default
