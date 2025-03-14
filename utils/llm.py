@@ -14,24 +14,12 @@ def config_llm():
         key='model_opt'
     )
 
-    temp_opt = st.sidebar.slider(
-        "Select Temperature",
-        min_value=0.0,
-        max_value=2.0,
-        value=1.0,
-        step=0.25,
-        key='temp_opt'
+    llm = ChatOpenAI(
+        model=model_opt,
+        temperature=1.0,
+        api_key=OPENAI_API_KEY,
+        streaming=True
     )
-
-    llm = None
-
-    if model_opt in ["gpt-4o-mini", "o1-mini"]:
-        llm = ChatOpenAI(
-            model=model_opt,
-            temperature=temp_opt,
-            api_key=OPENAI_API_KEY,
-            streaming=True
-        )
 
     return llm
 

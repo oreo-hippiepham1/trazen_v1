@@ -18,12 +18,12 @@ from utils.chat_utils import enable_chat_history, display_single_message
 import os
 
 st.set_page_config(
-    page_title="RAG Test",
+    page_title="QnA Chatbot",
     page_icon="🤖",
     layout="wide"
 )
 
-st.title("RAG Test")
+st.title("QnA Chatbot")
 
 class RAGTest:
     def __init__(self):
@@ -115,6 +115,9 @@ class RAGTest:
         if 'chapter_extracted' not in st.session_state or st.session_state['chapter_extracted'] is None:
             st.warning("Please select a chapter first!")
             st.stop()
+
+        st.sidebar.write("Selected Chapter:")
+        st.sidebar.json(st.session_state['selected_chapter'])
 
         chapter_id = st.session_state['selected_chapter']['id']
         if chapter_id not in st.session_state['uploaded_namespaces']:

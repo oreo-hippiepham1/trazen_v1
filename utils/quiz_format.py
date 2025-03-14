@@ -1,3 +1,5 @@
+from typing import Dict, Any
+import json
 
 q1 = {
     "question_number": 1,
@@ -121,3 +123,78 @@ q_bank = [q1, q2, q3, q4, q5,
           q6, q7, q8, q9, q10,
           q11, q12, q13, q14, q15]
 # generate some sample questions
+
+'''
+{
+    "question": "What has the World Health Organization classified nighttime shift work as?",
+    "distractors": ["A necessary career choice", "An essential job role", "A common lifestyle", "An unavoidable health risk"],
+    "correct_answer": "A probable carcinogen",
+    "explanation": "The World Health Organization has classified nighttime shift work as a 'probable carcinogen' due to its links with cancer development, particularly because it disrupts sleep and circadian rhythms."
+}
+'''
+def verify_dict(content: str) -> Dict[str, Any]:
+    """
+    Verify if the quiz is a valid JSON string.
+    """
+    # Try to find JSON content if there's text around it
+    if content.find('{') > -1 and content.rfind('}') > -1:
+        start = content.find('{')
+        end = content.rfind('}') + 1
+        content = content[start:end]
+
+    try:
+        quiz_dict = json.loads(content)
+        required_keys = ['question', 'distractors', 'correct_answer', 'explanation']
+        # Check if all required keys are present
+        for key in required_keys:
+            if key not in quiz_dict:
+                raise ValueError(f"Missing required key: {key}")
+
+        if isinstance(quiz_dict, dict):
+            return quiz_dict
+        else:
+            raise ValueError("Invalid JSON format")
+
+    except json.JSONDecodeError as e:
+        print(f"JSON decode error: {e}")
+        return {
+                "question": "Error generating quiz question",
+                "distractors": ["Option A", "Option B", "Option C", "Option D"],
+                "correct_answer": "Option A",
+                "explanation": f"Error: {str(e)}. Raw response: {content[:100]}..."
+            }
+    except Exception as e:
+        print(f"Error: {e}")
+        return {
+                "question": "Error generating quiz question",
+                "answers": ["Option A", "Option B", "Option C", "Option D"],
+                "correct_answer": "Option A",
+                "explanation": f"Error: {str(e)}. Raw response: {content[:100]}..."
+            }
+
+
+def format_quiz(quiz: str) -> dict[str, Any]:
+    """
+    Format the quiz into a more reliable format.
+    """
+    formatted_quiz = {}
+    quiz_dict = verify_dict(quiz)
+    try:
+        formatted_quiz['question'] = quiz_dict['question']
+
+        formatted_quiz['answers'] = quiz_dict['distractors']
+        # sometimes, LLM messes up and the correct answer is already in the distractors
+        if quiz_dict['correct_answer'] not in formatted_quiz['answers']:
+            formatted_quiz['answers'].append(quiz_dict['correct_answer']) # is a list
+
+        # Shuffle the answers
+        import random
+        random.shuffle(formatted_quiz['answers'])
+
+        formatted_quiz['correct_answer'] = quiz_dict['correct_answer']
+        formatted_quiz['explanation'] = quiz_dict['explanation']
+    except Exception as e:
+        print(f"Error formatting quiz: {e}")
+        formatted_quiz = {}
+
+    return formatted_quiz

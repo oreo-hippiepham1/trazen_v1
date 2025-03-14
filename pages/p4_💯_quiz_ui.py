@@ -1,6 +1,9 @@
+from ninja import expand
+from requests import session
 import streamlit as st
 
 from utils import *
+from rag import *
 
 import time
 import random
@@ -9,7 +12,7 @@ import random
 ## SOURCE: https://medium.com/@fesomade.alli/building-a-quiz-app-in-python-using-streamlit-d7c1aab4d690
 
 st.set_page_config(
-    page_title="Test Quiz UI",
+    page_title="Quiz UI",
     page_icon="💯",
     layout="centered",
 )
@@ -76,7 +79,7 @@ st.title("Test Quiz UI 💯")
 StateManager.initialize_states()
 
 # Set tabs
-tab1, tab2 = st.tabs(["Quiz", "Configs"])
+tab1, tab2= st.tabs(["Quiz", "Configs"])
 
 class QuizUITest():
     def __init__(self, quiz_configs):
@@ -86,7 +89,11 @@ class QuizUITest():
 
     def load_quiz(self):
         ss = st.session_state
-        ss['current_quiz'] = random.sample(q_bank, ss['current_config']['n_quiz']) # randomize quiz questions
+        q_bank = st.session_state['quiz_bank']  # quiz bank is a list of dicts
+        if ss['current_config']['n_quiz'] <= len(q_bank):
+            ss['current_quiz'] = random.sample(q_bank, ss['current_config']['n_quiz']) # randomize quiz questions
+        else:
+            ss['current_quiz'] = q_bank # if not enough questions, use all available
 
     def _reset(self):
         ss = st.session_state
@@ -110,7 +117,6 @@ class QuizUITest():
             with st.spinner("Loading..."):
                 time.sleep(2) # simulates loading time + avoids spamming
 
-
     def update_ss(self):
         ss = st.session_state
         if ss.counter == 1: # start quiz
@@ -127,25 +133,26 @@ class QuizUITest():
         ss = st.session_state
 
         with st.container():
-            for i in range(len(ss.current_quiz)):
+            for quiz_idx, quiz in enumerate(ss.current_quiz):
                 q_num_placeholder = st.empty()
                 q_placeholder = st.empty()
                 answers_placeholder = st.empty()
                 results_placeholder = st.empty()
-                expander_area = st.empty()
+                expander_area_explanation = st.empty()
+                expander_area_reference = st.empty()
 
-                current_question = i + 1
+                #current_question = i + 1
                 # Display question number
-                q_num_placeholder.write(f"**Question {current_question}**")
+                q_num_placeholder.write(f"**Question {quiz_idx+1}**")
                 # Display question content
-                q_placeholder.write(f"*{ss.current_quiz[i].get('question')}*") # current_quiz is list[dict]
+                q_placeholder.write(f"*{quiz['quiz_formatted'].get('question')}*") # current_quiz is list[dict]
                 # Display question options (answers)
-                answers = ss.current_quiz[i].get('answers')
+                answers = quiz['quiz_formatted'].get('answers')
                 answers_placeholder.radio(
                     "",
                     answers,
                     index=1,
-                    key=f"Q{current_question}" # binds current answer choice to session_state
+                    key=f"Q{quiz_idx+1}" # binds current answer choice to session_state
                 )
                 nl(2)
 
@@ -154,7 +161,7 @@ class QuizUITest():
                     # length of user answers
                     if len(ss.user_answers) < len(ss.current_quiz):
                         # compare answers
-                        if (ss.current_quiz[i].get('correct_answer') == ss[f'Q{current_question}']):
+                        if (quiz['quiz_formatted'].get('correct_answer') == ss[f'Q{quiz_idx+1}']):
                             ss.user_answers.append(1)
                         else:
                             ss.user_answers.append(0)
@@ -162,12 +169,27 @@ class QuizUITest():
                         pass
 
                     # Feedback
-                    if ss.user_answers[i] == 1:
+                    if ss.user_answers[quiz_idx] == 1:
                         results_placeholder.success("Correct")
                     else:
                         results_placeholder.error("Incorrect")
 
-                    expander_area.expander("Explanation", expanded=False).write(ss.current_quiz[i].get('explanation'))
+                    # Explanations
+                    with expander_area_explanation.expander(label="Explanation", expanded=False):
+                        st.write(quiz['quiz_formatted'].get('explanation'))
+
+                    # References
+                    with expander_area_reference.expander(label="References", expanded=False):
+                        docs = quiz['quiz_src']  # Dict[str, List]
+
+                        for ref_idx, (source, content) in enumerate(zip(docs['source'], docs['content'])):
+                            page = source['page']
+                            chapter = source['chapter_title']
+
+                            reference = f"Chapter: {chapter}, Page: {page}"
+                            with st.popover(label=f"Reference {ref_idx+1} - {reference}"):
+                                st.caption(content)
+
 
         # Final score
         if ss.stop:
@@ -290,10 +312,27 @@ class QuizConfigs():
 
 if __name__ == "__main__":
     quiz_conf = QuizConfigs()
+    if ('selected_chapter' not in st.session_state) or ('selected_chapter_chunks' not in st.session_state):
+        st.warning("Please select a chapter first! (Page 1) (not init)" )
+        st.stop()
+
+    if (st.session_state['selected_chapter'] is None) or(st.session_state['selected_chapter_chunks'] is None):
+        st.warning("Please select a chapter first! (Page 1) (currently None)" )
+        st.stop()
+
+    with st.sidebar:
+        st.write("Selected Chapter:")
+        st.json(st.session_state['selected_chapter'])  # Display selected chapter info
+
 
     with tab1:
-        quiz_ui = QuizUITest(quiz_conf.get_configs())
-        quiz_ui.main()
+        # Initialize quiz bank if not already done
+        if 'quiz_bank' not in st.session_state or st.session_state['quiz_bank'] is None:
+            st.session_state['quiz_bank'] = None
+            st.warning("Quiz bank is empty. Please generate it in the Page 3 (quiz gen). 👈")
+        else:
+            quiz_ui = QuizUITest(quiz_conf.get_configs())
+            quiz_ui.main()
 
     with tab2:
         quiz_conf.main()

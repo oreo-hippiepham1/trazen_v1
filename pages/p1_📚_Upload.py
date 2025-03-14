@@ -14,7 +14,7 @@ from utils import process_book, extract_chapter
 
 
 st.set_page_config(
-    page_title="Test - Upload",
+    page_title="Book Upload Section",
     page_icon="📚",
     layout='wide'
 )
@@ -40,6 +40,8 @@ class Uploader():
             st.session_state.selected_chapter = None
         if 'chapter_page_range' not in st.session_state:
             st.session_state.chapter_page_range = None
+        if 'uploaded_namespaces' not in st.session_state:
+            st.session_state.uploaded_namespaces = []
 
     def upload_section(self) -> tuple[str, list]:
         """Handle PDF upload and processing
@@ -110,7 +112,7 @@ class Uploader():
         try:
             chaps_dict = extract_chapter(self.filepath)
             toc = chaps_dict['toc']
-            if not toc:
+            if not toc or toc == []:
                 st.warning("Could not successfully parse and extract book chapters!")
                 return
             prange = chaps_dict['prange']
@@ -157,28 +159,32 @@ class Uploader():
     def embed_chapter(self):
         """Embed and store selected chapter in vector store"""
         try:
+            embed_flag = True
+
+            if 'uploaded_namespaces' not in st.session_state:
+                    st.session_state['uploaded_namespaces'] = []
+
             if not st.session_state.get('selected_chapter'):
-                st.warning("Please select a chapter first!")
+                st.warning("Please pick a chapter first!")
                 return
 
             chapter_id = st.session_state.selected_chapter['id']
 
-            if 'uploaded_namespaces' not in st.session_state:
-                st.session_state['uploaded_namespaces'] = []
-            if chapter_id in st.session_state['uploaded_namespaces']:
-                st.warning(f"Chapter ID {chapter_id} already exists in the vector store. Please select a different chapter.")
-
-            if st.button("Embed Selected Chapter"):
+            if st.button("Select Chapter"):
                 # check if chapter_id already exists in the vector store
                 pc, index = config_pinecone()
                 ns = index.describe_index_stats()['namespaces']
                 if chapter_id in ns:
-                    st.warning(f"Chapter ID {chapter_id} already exists in the vector store. Please select a different chapter.")
-                    return
+                    st.warning(f"Check 1.. Chapter ID {chapter_id} already exists in the vector store.")
+                    if chapter_id not in st.session_state['uploaded_namespaces']:
+                        st.session_state['uploaded_namespaces'].append(chapter_id)
+                    embed_flag = False
 
-                if chapter_id in st.session_state.uploaded_namespaces:
-                    st.warning(f"Chapter ID {chapter_id} already exists in the vector store. Please select a different chapter.")
-                    return
+                if chapter_id in st.session_state['uploaded_namespaces']:
+                    st.warning(f"Check 2.. Chapter ID {chapter_id} already exists in the vector store.")
+                    if chapter_id not in st.session_state['uploaded_namespaces']:
+                        st.session_state['uploaded_namespaces'].append(chapter_id)
+                    embed_flag = False
 
                 start_total = time.time()
 
@@ -203,8 +209,10 @@ class Uploader():
                 text_splitter = RecursiveCharacterTextSplitter(
                     chunk_size=1000,
                     chunk_overlap=200,
-                    length_function=len
+                    length_function=len,
+                    separators=["\n\n", "\n", " ", ""]
                 )
+
                 chunks = text_splitter.create_documents(texts, metadatas)
                 st.write(f"**Split into {len(chunks)} chunks**")
                 st.write(f"Time taken: {time.time() - start:.2f} seconds")
@@ -220,41 +228,48 @@ class Uploader():
                 st.write(f"**Added metadata to {len(chunks)} chunks**")
                 st.write(f"Time taken: {time.time() - start:.2f} seconds")
 
-                ## VECTOR STORE
-                start = time.time()
-                # Initialize components
-                embeddings = config_embedding_model_simple()
+                ## Adding chunks to session state
+                if 'selected_chapter_chunks' not in st.session_state:
+                    st.session_state['selected_chapter_chunks'] = []
 
-                # Create vector store
-                vectorstore = PineconeVectorStore(
-                    index=index,
-                    embedding=embeddings,
-                    namespace=chapter_id
-                )
-                st.write(f"**Vector store created.**")
-                st.write(f"Time taken: {time.time() - start:.2f} seconds")
+                ### IMPORTANT: Saving to session state
+                st.session_state['selected_chapter_chunks'] = chunks
 
-                ## EMBEDDING
-                start = time.time()
-                # Embed and store chunks
-                # with st.spinner(f"Embedding chapter, appox. {st.session_state.selected_chapter['end'] - st.session_state.selected_chapter['start'] + 1} pages"):
-                #     for chunk in chunks:
-                #         vectorstore.add_documents([chunk])
-                batch_size = 100 # Pinecone recommends 100
-                total_chunks = len(chunks)
+                if embed_flag:
+                    ## VECTOR STORE
+                    start = time.time()
+                    # Initialize components
+                    embeddings = config_embedding_model_simple()
 
-                with st.spinner(f"Embedding {total_chunks} chunks..."):
-                    for i in range(0, total_chunks, batch_size):
-                        batch = chunks[i:i + batch_size]
-                        vectorstore.add_documents(batch)
-                        st.write(f'**Processed {min(i + batch_size, total_chunks)} of {total_chunks} chunks.**')
+                    # Create vector store
+                    vectorstore = PineconeVectorStore(
+                        index=index,
+                        embedding=embeddings,
+                        namespace=chapter_id
+                    )
+                    st.write(f"**Vector store created.**")
+                    st.write(f"Time taken: {time.time() - start:.2f} seconds")
 
-                st.write(f"Embedded {total_chunks} chunks")
-                st.write(f"Time taken: {time.time() - start:.2f} seconds")
-                st.write(f"Total time taken: {time.time() - start_total:.2f} seconds")
-                st.success(f"Successfully embedded chapter: {st.session_state.selected_chapter['title']} -- ID {chapter_id}")
+                    ## EMBEDDING
+                    start = time.time()
 
-                st.session_state.uploaded_namespaces.append(chapter_id)
+                    batch_size = 100 # Pinecone recommends 100
+                    total_chunks = len(chunks)
+
+                    with st.spinner(f"Embedding {total_chunks} chunks..."):
+                        for i in range(0, total_chunks, batch_size):
+                            batch = chunks[i:i + batch_size]
+                            vectorstore.add_documents(batch)
+                            st.write(f'**Processed {min(i + batch_size, total_chunks)} of {total_chunks} chunks.**')
+
+                    st.write(f"Embedded {total_chunks} chunks")
+                    st.write(f"Time taken: {time.time() - start:.2f} seconds")
+                    st.write(f"Total time taken: {time.time() - start_total:.2f} seconds")
+                    st.success(f"Successfully embedded chapter: {st.session_state.selected_chapter['title']} -- ID {chapter_id}")
+
+                    st.session_state.uploaded_namespaces.append(chapter_id)
+
+                st.success(f"Chapter ID {chapter_id} selected.")
 
         except Exception as e:
             st.error(f"Error embedding chapter: {str(e)}")
